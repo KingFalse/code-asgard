@@ -1,5 +1,5 @@
 version: "3.7"
-# 完整文件: https://github.com/KingFalse/veronica/airflow2.0/docker-compose.yml
+# 完整文件: https://github.com/KingFalse/veronica/blob/main/airflow2.0/docker-compose.yml
 # 启动一个airflow实例并创建用户:admin 密码:admin123
 x-airflow-env: 
   &airflow-env
