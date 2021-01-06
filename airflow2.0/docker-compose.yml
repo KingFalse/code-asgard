@@ -1,0 +1,103 @@
+version: "3.7"
+# 完整文件: https://github.com/KingFalse/veronica/airflow2.0/docker-compose.yml
+# 启动一个airflow实例并创建用户:admin 密码:admin123
+x-airflow-env: 
+  &airflow-env
+  AIRFLOW__CORE__DEFAULT_TIMEZONE: system #解决UTC时区问题
+  AIRFLOW__CORE__EXECUTOR: LocalExecutor #加载示例任务
+  AIRFLOW__CORE__LOAD_EXAMPLES: 'True'
+  AIRFLOW__CORE__LOAD_DEFAULT_CONNECTIONS: 'False'
+  AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgres+psycopg2://airflow:www.kagura.me@postgres:5432/airflow
+  AIRFLOW__CORE__FERNET_KEY: 81HqDtbqAywKSOumSha3BhWNOdQ26slT6K0YaZeZyPs= 
+  AIRFLOW_CONN_METADATA_DB: postgres+psycopg2://airflow:www.kagura.me@postgres:5432/airflow
+  AIRFLOW_VAR__METADATA_DB_SCHEMA: airflow
+  AIRFLOW__SCHEDULER__SCHEDULER_HEARTBEAT_SEC: 10
+  AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL: 60 # dags目录自动刷新时间，60秒
+  AIRFLOW__WEBSERVER__DEFAULT_UI_TIMEZONE: system #解决UTC时区问题
+  AIRFLOW__WEBSERVER__RBAC: 'True'
+  AIRFLOW__WEBSERVER__AUTHENTICATE: 'True'
+  AIRFLOW__WEBSERVER__AUTH_BACKEND: airflow.contrib.auth.backends.password_auth #启用密码认证登陆
+  AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'True'
+
+x-airflow-vol: 
+  &airflow-volumes
+    - /etc/localtime:/etc/localtime
+    - ./dags:/opt/airflow/dags
+services:
+  postgres:
+    image: postgres:12
+    container_name: airflow_postgres_1
+    restart: always
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=www.kagura.me
+      - POSTGRES_DB=airflow
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data/
+    ports:
+      - "5433:5432"
+
+  scheduler:
+    image: apache/airflow
+    container_name: airflow_scheduler_1
+    restart: always
+    depends_on:
+      - postgres
+      - webserver
+    environment:
+      <<: *airflow-env
+    ports:
+      - "8793:8793"
+    volumes: 
+      *airflow-volumes
+    command: scheduler
+    healthcheck:
+      test: ["CMD-SHELL", "[ -f /usr/local/airflow/airflow-webserver.pid ]"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+
+  webserver:
+    image: apache/airflow
+    container_name: airflow_webserver_1
+    hostname: webserver
+    restart: always
+    depends_on:
+      - postgres
+    environment:
+      <<: *airflow-env
+    volumes: 
+      *airflow-volumes
+    ports:
+      - "8080:8080"
+    entrypoint: bash -c "
+        airflow db upgrade
+        && airflow users create -r Admin -u admin -e admin@example.com -f False -l King -p admin123
+        && pip3 config set global.index-url https://pypi.mirrors.ustc.edu.cn/simple/
+        && airflow webserver
+      "
+    healthcheck:
+      test: ["CMD-SHELL", "[ -f /usr/local/airflow/airflow-webserver.pid ]"]
+      interval: 30s
+      timeout: 30s
+      retries: 32
+
+# # 后续pip安装依赖
+# # webserver
+# docker exec -u root airflow_webserver_1 pip3 config set global.index-url https://pypi.mirrors.ustc.edu.cn/simple/
+# docker exec -u root airflow_webserver_1 pip3 install pymysql
+# docker exec -u root airflow_webserver_1 pip3 install pandas
+# docker exec -u root airflow_webserver_1 pip3 install requests
+# docker exec -u root airflow_webserver_1 pip3 install selenium
+# # scheduler
+# docker exec -u root airflow_scheduler_1 pip3 config set global.index-url https://pypi.mirrors.ustc.edu.cn/simple/
+# docker exec -u root airflow_scheduler_1 pip3 install pymysql
+# docker exec -u root airflow_scheduler_1 pip3 install pandas
+# docker exec -u root airflow_scheduler_1 pip3 install requests
+# docker exec -u root airflow_scheduler_1 pip3 install selenium
+# # 安装代码编辑器插件
+# docker exec -u root airflow_webserver_1 pip3 install airflow-code-editor
+# # 替换apt镜像
+# docker exec -u root airflow_webserver_1 sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list
+# # 安装git
+# docker exec -u root airflow_webserver_1 apt install -y git
